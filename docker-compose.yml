@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: gerenciador_api
+    volumes:
+      - ./backend:/var/www/html
+    ports:
+      - "8080:80"
+    networks:
+      - gerenciador_network
+
+  # (Banco de Dados)
+  db:
+    image: mysql:8.0
+    container_name: gerenciador_db
+    restart: always
+    environment:
+      MYSQL_DATABASE: gerenciador_tarefas
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    networks:
+      - gerenciador_network
+
+networks:
+  gerenciador_network:
+    driver: bridge
