@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciador de Tarefas da Eli</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-md mx-auto bg-white p-6 rounded-lg shadow-lg">
+        <h1 class="text-2xl font-bold mb-4 text-blue-600">Minhas Tarefas</h1>
+        
+        <div class="mb-6">
+            <input id="titulo" type="text" placeholder="Título da tarefa" class="w-full p-2 border rounded mb-2">
+            <textarea id="descricao" placeholder="Descrição" class="w-full p-2 border rounded mb-2"></textarea>
+            <button onclick="salvarTarefa()" class="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600 transition">Salvar Tarefa</button>
+        </div>
+
+        <hr class="my-4">
+
+        <ul id="lista-tarefas" class="space-y-2">
+            </ul>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8080/backend';
+
+        async function carregarTarefas() {
+            try {
+                const response = await fetch(`${API_URL}/listar_tarefas.php`);
+                const tarefas = await response.json();
+                const lista = document.getElementById('lista-tarefas');
+                lista.innerHTML = '';
+
+                tarefas.forEach(tarefa => {
+                    const item = document.createElement('li');
+                    item.className = "p-3 bg-gray-50 rounded border flex justify-between items-center shadow-sm";
+                    item.innerHTML = `
+                        <div>
+                            <strong class="block text-gray-800">${tarefa.titulo}</strong>
+                            <span class="text-sm text-gray-500">${tarefa.descricao}</span>
+                        </div>
+                        <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded font-semibold uppercase">${tarefa.status}</span>
+                    `;
+                    lista.appendChild(item);
+                });
+            } catch (error) {
+                console.error("Erro ao carregar:", error);
+            }
+        }
+
+        async function salvarTarefa() {
+            const titulo = document.getElementById('titulo').value;
+            const descricao = document.getElementById('descricao').value;
+
+            if (!titulo) {
+                alert("Por favor, digite um título!");
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/criar_tarefa.php`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ titulo, descricao })
+                });
+
+                const result = await response.json();
+                
+                if (result.mensagem) {
+                    alert(result.mensagem);
+                    document.getElementById('titulo').value = '';
+                    document.getElementById('descricao').value = '';
+                    carregarTarefas(); // Atualiza a lista sem recarregar a página toda!
+                } else {
+                    alert("Erro: " + result.erro);
+                }
+            } catch (error) {
+                alert("Erro na comunicação com o servidor.");
+            }
+        }
+
+        // Inicia a lista quando abre a página
+        carregarTarefas();
+    </script>
+</body>
+</html>
