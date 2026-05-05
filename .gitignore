@@ -1,0 +1,5 @@
+# Ignora a pasta do banco de dados do Docker
+mysql_data/
+
+# Ignora arquivos de sistema do Linux/Mac
+.DS_Store

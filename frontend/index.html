@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <input id="tarefa-id" type="hidden">
     <title>Gerenciador de Tarefas da Eli</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -22,66 +23,220 @@
             </ul>
     </div>
 
+    <!-- Fica invisível no canto inferior direito -->
+    <div id="toast" class="fixed bottom-5 right-5 transform translate-x-full transition-transform duration-300 flex items-center p-4 mb-4 text-gray-700 bg-white rounded-lg shadow-xl border-l-4 z-50" role="alert">
+        <div id="toast-icone" class="inline-flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg font-bold">
+            <!-- O ícone de ✓ ou X vai aparecer aqui -->
+        </div>
+        <div id="toast-mensagem" class="ml-3 text-sm font-medium">
+            <!-- A mensagem entra aqui -->
+        </div>
+    </div>
+
+    <!-- Nosso Modal de Exclusão Bonitão (Invisível por padrão) -->
+    <div id="modal-exclusao" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full">
+            <h2 class="text-lg font-bold text-gray-800 mb-4">Confirmar Exclusão</h2>
+            <p class="text-sm text-gray-600 mb-6">Tem certeza que deseja apagar esta tarefa para sempre? Esta ação não pode ser desfeita.</p>
+            <div class="flex justify-end gap-3">
+                <!-- Botões para fechar ou confirmar -->
+                <button onclick="fecharModal()" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-medium transition">Cancelar</button>
+                <button onclick="confirmarExclusao()" class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 font-medium transition">Sim, apagar</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const API_URL = 'http://localhost:8080/backend';
 
-        async function carregarTarefas() {
-            try {
-                const response = await fetch(`${API_URL}/listar_tarefas.php`);
-                const tarefas = await response.json();
-                const lista = document.getElementById('lista-tarefas');
-                lista.innerHTML = '';
+       async function carregarTarefas() {
+        try {
+            const response = await fetch(`${API_URL}/listar_tarefas.php`);
+            const tarefas = await response.json();
 
-                tarefas.forEach(tarefa => {
-                    const item = document.createElement('li');
-                    item.className = "p-3 bg-gray-50 rounded border flex justify-between items-center shadow-sm";
-                    item.innerHTML = `
-                        <div>
-                            <strong class="block text-gray-800">${tarefa.titulo}</strong>
-                            <span class="text-sm text-gray-500">${tarefa.descricao}</span>
-                        </div>
-                        <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded font-semibold uppercase">${tarefa.status}</span>
-                    `;
-                    lista.appendChild(item);
-                });
+            // SE o servidor devolver um erro em vez de uma lista, a gente avisa!
+            if (tarefas.erro) {
+                mostrarToast("Erro do banco: " + tarefas.erro, "erro");
+                return; // Para a função aqui para não quebrar a tela
+            }
+
+            const lista = document.getElementById('lista-tarefas');
+            lista.innerHTML = '';
+
+             tarefas.forEach(tarefa => {
+    const item = document.createElement('li');
+    item.className = "p-4 bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col gap-2 hover:border-blue-300 transition";
+    
+    // Formata a data para o padrão brasileiro (DD/MM/AAAA às HH:MM)
+    const dataBr = new Date(tarefa.data_criacao).toLocaleString('pt-BR');
+
+
+item.innerHTML = `
+        <div class="flex justify-between items-start">
+            <div>
+                <strong class="block text-gray-800 text-lg">${tarefa.titulo}</strong>
+                <span class="text-sm text-gray-600">${tarefa.descricao}</span>
+            </div>
+            <span class="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                ${tarefa.status}
+            </span>
+        </div>
+        
+        <!-- ESTA É A DIV DO RODAPÉ (Note o flex-wrap adicionado aqui) -->
+        <div class="flex flex-wrap justify-between items-center mt-2 pt-2 border-t border-gray-100 gap-3">
+            <span class="text-[11px] text-gray-400 font-medium">
+                📅 Criada em: ${dataBr}
+            </span>
+            <div class="flex gap-3"> 
+                <button onclick="prepararEdicao(${tarefa.id}, '${tarefa.titulo}', '${tarefa.descricao}')" class="text-xs text-blue-600 font-bold hover:underline">
+                    ✎ Editar
+                </button>
+                <button onclick="excluirTarefa(${tarefa.id})" class="text-xs text-red-500 font-bold hover:underline">
+                    🗑️ Excluir
+                </button>
+                ${tarefa.status === 'pendente' ? 
+                    `<button onclick="concluirTarefa(${tarefa.id})" class="text-xs text-green-600 font-bold hover:underline">
+                        ✓ Feita
+                    </button>` : ''
+                }
+            </div>
+        </div>
+    `;
+    lista.appendChild(item);
+});
             } catch (error) {
                 console.error("Erro ao carregar:", error);
             }
         }
 
         async function salvarTarefa() {
-            const titulo = document.getElementById('titulo').value;
-            const descricao = document.getElementById('descricao').value;
+    const id = document.getElementById('tarefa-id').value;
+    const titulo = document.getElementById('titulo').value;
+    const descricao = document.getElementById('descricao').value;
 
-            if (!titulo) {
-                alert("Por favor, digite um título!");
-                return;
-            }
+    // Se tiver ID, o endpoint é editar, se não, é criar
+    const endpoint = id ? 'editar_tarefa.php' : 'criar_tarefa.php';
+    
+    const response = await fetch(`${API_URL}/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, titulo, descricao })
+    });
 
+    const result = await response.json();
+    if (result.mensagem) {
+        mostrarToast(result.mensagem, 'sucesso');
+        // Limpa tudo e volta ao normal
+        document.getElementById('tarefa-id').value = '';
+        document.getElementById('titulo').value = '';
+        document.getElementById('descricao').value = '';
+        carregarTarefas();
+        } else if (result.erro) {
+        // Se a API devolver erro, aciona o Toast vermelho!
+        mostrarToast("Falha ao salvar: " + result.erro, "erro");
+    }
+    }
+
+// Função para "carregar" os dados no formulário lá no topo
+function prepararEdicao(id, titulo, descricao) {
+    document.getElementById('tarefa-id').value = id;
+    document.getElementById('titulo').value = titulo;
+    document.getElementById('descricao').value = descricao;
+    window.scrollTo(0, 0); // Sobe a tela para o usuário ver o formulário preenchido
+}
+        async function concluirTarefa(id) {
+    try {
+        const response = await fetch(`${API_URL}/concluir_tarefa.php`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id })
+        });
+
+        const result = await response.json();
+        if (result.mensagem) {
+            carregarTarefas(); // Atualiza a lista para mostrar o novo status
+        } else {
+            mostrarToast("Erro: " + result.erro, 'erro');
+        }
+    } catch (error) {
+        mostrarToast("Erro ao conectar com o servidor.", 'erro');
+    }
+}
+
+// Variável para lembrar qual tarefa o usuário clicou
+        let idParaExcluir = null;
+
+        // 1. Quando clica no botão "Excluir" do card, apenas abre a janela
+        function excluirTarefa(id) {
+            idParaExcluir = id; 
+            document.getElementById('modal-exclusao').classList.remove('hidden'); 
+        }
+
+        // 2. Se clicar em Cancelar, esconde a janela e esquece o ID
+        function fecharModal() {
+            idParaExcluir = null;
+            document.getElementById('modal-exclusao').classList.add('hidden'); 
+        }
+
+        // 3. Se clicar em "Sim, apagar", faz o trabalho pesado
+     async function confirmarExclusao() {
+            // 1. Guarda o ID numa variável "segura" local ANTES de fechar o modal
+            const idSeguro = idParaExcluir; 
+
+            // 2. Agora sim, pode fechar a tela (o que vai zerar o idParaExcluir global)
+            fecharModal(); 
+            
             try {
-                const response = await fetch(`${API_URL}/criar_tarefa.php`, {
+                const response = await fetch(`${API_URL}/excluir_tarefa.php`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ titulo, descricao })
+                    // 3. Usa a variável segura aqui!
+                    body: JSON.stringify({ id: idSeguro }) 
                 });
 
                 const result = await response.json();
                 
                 if (result.mensagem) {
-                    alert(result.mensagem);
-                    document.getElementById('titulo').value = '';
-                    document.getElementById('descricao').value = '';
-                    carregarTarefas(); // Atualiza a lista sem recarregar a página toda!
+                    mostrarToast("Tarefa apagada com sucesso!", "sucesso");
+                    carregarTarefas(); 
                 } else {
-                    alert("Erro: " + result.erro);
+                    mostrarToast("Erro: " + result.erro, "erro");
                 }
             } catch (error) {
-                alert("Erro na comunicação com o servidor.");
+                mostrarToast("Erro ao conectar com o servidor.", "erro");
             }
         }
-
         // Inicia a lista quando abre a página
         carregarTarefas();
+
+        function mostrarToast(mensagem, tipo = 'sucesso') {
+        const toast = document.getElementById('toast');
+        const toastMensagem = document.getElementById('toast-mensagem');
+        const toastIcone = document.getElementById('toast-icone');
+
+        // Pinta de verde se for sucesso, ou vermelho se for erro
+        if (tipo === 'sucesso') {
+            toast.className = "fixed bottom-5 right-5 transform translate-x-full transition-transform duration-300 flex items-center p-4 mb-4 text-gray-700 bg-white rounded-lg shadow-xl border-l-4 border-green-500 z-50";
+            toastIcone.className = "inline-flex items-center justify-center flex-shrink-0 w-8 h-8 text-green-500 bg-green-100 rounded-lg";
+            toastIcone.innerHTML = "✓";
+        } else {
+            toast.className = "fixed bottom-5 right-5 transform translate-x-full transition-transform duration-300 flex items-center p-4 mb-4 text-gray-700 bg-white rounded-lg shadow-xl border-l-4 border-red-500 z-50";
+            toastIcone.className = "inline-flex items-center justify-center flex-shrink-0 w-8 h-8 text-red-500 bg-red-100 rounded-lg";
+            toastIcone.innerHTML = "✕";
+        }
+
+        // Escreve a mensagem
+        toastMensagem.textContent = mensagem;
+
+        // Faz o card deslizar para dentro da tela (tirando o translate-x-full)
+        toast.classList.remove('translate-x-full');
+
+        // Chama o garçom de volta após 3 segundos
+        setTimeout(() => {
+            toast.classList.add('translate-x-full');
+        }, 3000);
+    }
+    
     </script>
 </body>
 </html>
